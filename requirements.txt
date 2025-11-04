@@ -1,0 +1,8 @@
+Flask==3.0.3
+requests==2.32.3
+beautifulsoup4==4.12.3
+beautifulsoup4
+pdfminer.six      # 提取 PDF 文本
+pillow            # 图像处理（OCR）
+pytesseract       # OCR 引擎的 Python 绑定
+extract_msg       # 如果需要支持 .msg 文件
