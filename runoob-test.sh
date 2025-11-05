@@ -1,7 +1,8 @@
 project/
- ├─ app.py
+ ├─ app.py                  # 主 Flask 应用
  ├─ requirements.txt
+ ├─ uploads/                # 临时上传文件（自动清理）
+ ├─ pdfs/                   # 生成的 PDF 文件
  └─ templates/
-     └─ index.html
- └─ uploads/        # 上传临时文件
- └─ pdfs/           # 生成 PDF
+     ├─ index.html          # 浏览器上传页面
+     └─ admin.html          # 管理端页面
