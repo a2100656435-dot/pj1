@@ -1,8 +1,9 @@
 Flask==3.0.3
-fpdf2
+requests==2.32.3
+beautifulsoup4==4.12.3
 pdfminer.six
-python-docx
+pillow
 pytesseract
-Pillow
-PyMuPDF
-
+docx
+fitz
+reportlab
