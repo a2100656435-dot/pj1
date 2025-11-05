@@ -1,37 +1,108 @@
 import os, json, hashlib, re, time
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file, abort
 from werkzeug.utils import secure_filename
+from fpdf import FPDF
+import secrets, string
 
+# ===== Flask 初始化 =====
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['RESULT_FOLDER'] = 'results'
+app.config['PDF_FOLDER'] = 'pdfs'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
+os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
 CODES_FILE = "codes.json"
+ADMIN_KEY = os.getenv("ADMIN_KEY", "change_me_to_secure_key")  # 管理员接口 KEY
 
-# 初始化 codes.json，如果不存在
+# ===== PIN 管理逻辑 =====
 if not os.path.exists(CODES_FILE):
     with open(CODES_FILE, "w") as f:
-        json.dump({"TEST001": False, "TEST002": False}, f)
+        json.dump([], f)
 
-with open(CODES_FILE, "r") as f:
-    CODES = json.load(f)
+def load_codes():
+    with open(CODES_FILE, "r") as f:
+        return json.load(f)
 
-def save_codes():
+def save_codes(codes):
     with open(CODES_FILE, "w") as f:
-        json.dump(CODES, f, indent=2)
+        json.dump(codes, f, indent=2)
 
+def make_hash(salt_hex: str, pin_plain: str) -> str:
+    import hashlib
+    salt = bytes.fromhex(salt_hex)
+    return hashlib.sha256(salt + pin_plain.encode()).hexdigest()
+
+def generate_single_pin(length=10):
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+def generate_codes_batch(n=100, length=10):
+    codes = load_codes()
+    new_plain = []
+    for _ in range(n):
+        pin = generate_single_pin(length)
+        salt = secrets.token_hex(16)
+        h = make_hash(salt, pin)
+        codes.append({"hash": h, "salt": salt, "status": "unused", "created_at": int(time.time())})
+        new_plain.append(pin)
+    save_codes(codes)
+    return new_plain
+
+def invalidate_all_codes():
+    codes = load_codes()
+    for c in codes:
+        c["status"] = "expired"
+    save_codes(codes)
+    return len(codes)
+
+def verify_and_consume_code(pin_plain: str):
+    codes = load_codes()
+    for i, rec in enumerate(codes):
+        if rec.get("status") in ("used","expired"):
+            continue
+        if make_hash(rec["salt"], pin_plain) == rec["hash"]:
+            codes[i]["status"] = "used"
+            codes[i]["used_at"] = int(time.time())
+            save_codes(codes)
+            return True
+    return False
+
+# ===== 管理端接口 =====
+from functools import wraps
+from flask import abort
+
+def require_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        key = request.headers.get("X-Admin-Key") or request.args.get("admin_key")
+        if not key or key != ADMIN_KEY:
+            abort(401)
+        return f(*args, **kwargs)
+    return wrapper
+
+@app.route("/admin/regenerate_codes", methods=["POST"])
+@require_admin
+def admin_regenerate_codes():
+    body = request.get_json() or {}
+    count = int(body.get("count",100))
+    length = int(body.get("length",10))
+    n_old = invalidate_all_codes()
+    new_plain = generate_codes_batch(n=count,length=length)
+    return jsonify({"status":"ok","expired_old":n_old,"generated_count":len(new_plain),"pins":new_plain})
+
+# ===== 前端页面 =====
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# ===== 文件上传 + 扫描 + PDF =====
 @app.route('/upload', methods=['POST'])
 def upload():
     code = request.form.get('code')
     file = request.files.get('file')
-
-    if not code or code not in CODES or CODES[code]:
+    if not code or not verify_and_consume_code(code):
         return jsonify({"status":"error","message":"invalid or used code"}), 400
     if not file:
         return jsonify({"status":"error","message":"no file"}), 400
@@ -40,33 +111,49 @@ def upload():
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(path)
 
-    # 计算 SHA
-    with open(path, "rb") as f:
+    # SHA
+    with open(path,"rb") as f:
         data = f.read()
     sha = hashlib.sha256(data).hexdigest()
 
-    # 简单扫描示例
+    # 简单扫描
     text = data.decode(errors="ignore")
-    result = {
-        "sha": sha,
-        "filename": filename,
-        "url_count": len(re.findall(r'https?://[^\s"\']+', text)),
-        "suspicious_keywords": re.findall(r'\b(login|verify|password|account|reset)\b', text, flags=re.I)
-    }
+    urls = re.findall(r'https?://[^\s"\']+', text)
+    keywords = re.findall(r'\b(login|verify|password|account|reset)\b', text, flags=re.I)
+    result = {"sha": sha, "filename": filename, "url_count": len(urls), "suspicious_keywords": keywords}
 
-    # 保存扫描结果
+    # 保存 JSON
     result_path = os.path.join(app.config['RESULT_FOLDER'], f"{sha}.json")
-    with open(result_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+    with open(result_path,"w",encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
 
-    # 标记 code 已使用
-    CODES[code] = True
-    save_codes()
+    # 生成 PDF
+    pdf_path = os.path.join(app.config['PDF_FOLDER'], f"{sha}.pdf")
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial","B",16)
+    pdf.cell(0,10,"Scan Result",0,1)
+    pdf.set_font("Arial","",12)
+    pdf.cell(0,10,f"Filename: {filename}",0,1)
+    pdf.cell(0,10,f"SHA256: {sha}",0,1)
+    pdf.cell(0,10,f"URLs found: {len(urls)}",0,1)
+    pdf.cell(0,10,f"Suspicious keywords: {', '.join(keywords) if keywords else 'None'}",0,1)
+    pdf.output(pdf_path)
 
-    return jsonify({"status":"success", "result": result})
+    # 返回 JSON，包括 PDF 在线访问路径
+    return jsonify({"status":"success","result":result,"pdf_url":f"/pdf/{sha}"})
 
+# ===== PDF 查看 =====
+@app.route('/pdf/<sha>')
+def view_pdf(sha):
+    pdf_path = os.path.join(app.config['PDF_FOLDER'], f"{sha}.pdf")
+    if not os.path.exists(pdf_path):
+        abort(404)
+    return send_file(pdf_path, as_attachment=False)
+
+# ===== 启动 =====
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port)
 
 
