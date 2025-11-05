@@ -42,12 +42,17 @@ def extract_text(path, ext):
 def generate_pdf(text, filename):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial","B",16)
+    # 注册 Unicode 字体
+    pdf.add_font('DejaVu','', 'fonts/DejaVuSans.ttf', uni=True)
+    pdf.set_font('DejaVu','',12)
+    
     pdf.cell(0,10,"Scan Result",0,1)
-    pdf.set_font("Arial","",12)
+    
+    # 输出文本，每行自动换行
     for line in text.splitlines():
         pdf.multi_cell(0,8,line)
-    pdf_path = os.path.join(app.config['PDF_FOLDER'],filename)
+    
+    pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
     pdf.output(pdf_path)
     return pdf_path
 
@@ -112,6 +117,7 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
 
