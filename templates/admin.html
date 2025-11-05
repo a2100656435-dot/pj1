@@ -1,13 +1,10 @@
 <!doctype html>
 <html>
-<head>
-<meta charset="utf-8">
-<title>Admin - PDF Dashboard</title>
-</head>
+<head><meta charset="utf-8"><title>Admin - PDF Dashboard</title></head>
 <body>
 <h2>PDF Dashboard</h2>
 <table border="1" cellpadding="5" cellspacing="0">
-<tr><th>#</th><th>File Name</th><th>Preview</th></tr>
+<tr><th>#</th><th>File Name</th><th>Preview / Download</th></tr>
 {% for i,pdf in enumerate(pdfs,1) %}
 <tr>
   <td>{{ i }}</td>
