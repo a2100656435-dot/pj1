@@ -1,10 +1,6 @@
 Flask==3.0.3
-requests==2.32.3
-beautifulsoup4==4.12.3
-pdfminer.six
-Pillow
-pytesseract
-extract_msg
-werkzeug
 fpdf2
-
+pdfminer.six
+python-docx
+pytesseract
+Pillow
