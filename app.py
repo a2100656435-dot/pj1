@@ -100,50 +100,72 @@ def index():
 # ===== 文件上传 + 扫描 + PDF =====
 @app.route('/upload', methods=['POST'])
 def upload():
-    code = request.form.get('code')
-    file = request.files.get('file')
-    if not code or not verify_and_consume_code(code):
-        return jsonify({"status":"error","message":"invalid or used code"}), 400
-    if not file:
-        return jsonify({"status":"error","message":"no file"}), 400
+    try:
+        # ===== 获取 PIN 和文件 =====
+        code = request.form.get('code')
+        file = request.files.get('file')
+        if not code or not verify_and_consume_code(code):
+            return jsonify({"status":"error","message":"invalid or used code"}), 400
+        if not file:
+            return jsonify({"status":"error","message":"no file"}), 400
 
-    filename = secure_filename(file.filename)
-    path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(path)
+        # ===== 保存上传文件 =====
+        filename = secure_filename(file.filename)
+        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        file.save(path)
 
-    # SHA
-    with open(path,"rb") as f:
-        data = f.read()
-    sha = hashlib.sha256(data).hexdigest()
+        # ===== 计算 SHA256 =====
+        with open(path,"rb") as f:
+            data = f.read()
+        sha = hashlib.sha256(data).hexdigest()
 
-    # 简单扫描
-    text = data.decode(errors="ignore")
-    urls = re.findall(r'https?://[^\s"\']+', text)
-    keywords = re.findall(r'\b(login|verify|password|account|reset)\b', text, flags=re.I)
-    result = {"sha": sha, "filename": filename, "url_count": len(urls), "suspicious_keywords": keywords}
+        # ===== 简单扫描 =====
+        text = data.decode(errors="ignore")
+        urls = re.findall(r'https?://[^\s"\']+', text)
+        keywords = re.findall(r'\b(login|verify|password|account|reset)\b', text, flags=re.I)
+        result = {
+            "sha": sha,
+            "filename": filename,
+            "url_count": len(urls),
+            "suspicious_keywords": keywords
+        }
 
-    # 保存 JSON
-    result_path = os.path.join(app.config['RESULT_FOLDER'], f"{sha}.json")
-    with open(result_path,"w",encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
+        # ===== 保存 JSON 扫描结果 =====
+        os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
+        result_path = os.path.join(app.config['RESULT_FOLDER'], f"{sha}.json")
+        with open(result_path,"w",encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
 
-    # 生成 PDF
-    pdf_path = os.path.join(app.config['PDF_FOLDER'], f"{sha}.pdf")
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial","B",16)
-    pdf.cell(0,10,"Scan Result",0,1)
-    pdf.set_font("Arial","",12)
-    pdf.cell(0,10,f"Filename: {filename}",0,1)
-    pdf.cell(0,10,f"SHA256: {sha}",0,1)
-    pdf.cell(0,10,f"URLs found: {len(urls)}",0,1)
-    pdf.cell(0,10,f"Suspicious keywords: {', '.join(keywords) if keywords else 'None'}",0,1)
-    pdf.output(pdf_path)
+        # ===== 生成 PDF =====
+        os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
+        pdf_path = os.path.join(app.config['PDF_FOLDER'], f"{sha}.pdf")
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial","B",16)
+        pdf.cell(0,10,"Scan Result",0,1)
+        pdf.set_font("Arial","",12)
+        pdf.cell(0,10,f"Filename: {filename}",0,1)
+        pdf.cell(0,10,f"SHA256: {sha}",0,1)
+        pdf.cell(0,10,f"URLs found: {len(urls)}",0,1)
+        pdf.cell(0,10,f"Suspicious keywords: {', '.join(keywords) if keywords else 'None'}",0,1)
+        pdf.output(pdf_path)
 
-    # 返回 JSON，包括 PDF 在线访问路径
-    return jsonify({"status":"success","result":result,"pdf_url":f"/pdf/{sha}"})
+        # ===== 返回 JSON =====
+        return jsonify({
+            "status":"success",
+            "result": result,
+            "pdf_url": f"/pdf/{sha}"
+        })
 
-# ===== PDF 查看 =====
+    except Exception as e:
+        # 捕获所有异常，返回 JSON 而非 HTML
+        import traceback
+        return jsonify({
+            "status":"error",
+            "message": str(e),
+            "trace": traceback.format_exc()
+        }), 500
 @app.route('/pdf/<sha>')
 def view_pdf(sha):
     pdf_path = os.path.join(app.config['PDF_FOLDER'], f"{sha}.pdf")
@@ -155,6 +177,7 @@ def view_pdf(sha):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
