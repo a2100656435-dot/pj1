@@ -21,7 +21,7 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(form);
   try {
-    const res = await fetch('/upload', { method: 'POST', body: fd });
+    const res = await fetch(window.location.origin + '/upload', { method:'POST', body: fd });
     const data = await res.json();
     if (res.ok && data.status==="success") {
       const link = `<a href="${data.pdf_url}" target="_blank">View PDF</a>`;
