@@ -61,6 +61,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload',methods=['POST'])
+@app.route('/upload',methods=['POST'])
 def upload():
     if 'file' not in request.files:
         return jsonify({"status":"error","message":"no file"}),400
@@ -77,8 +78,12 @@ def upload():
 
     # 提取文字
     text = extract_text(path, ext)
-    sha = hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
-    pdf_filename = f"{sha}.pdf"
+
+    # 生成 PDF 文件名（允许重复扫描）
+    import time, secrets
+    timestamp = int(time.time())
+    randstr = secrets.token_hex(4)
+    pdf_filename = f"{timestamp}_{randstr}.pdf"
     pdf_path = generate_pdf(text, pdf_filename)
 
     # 上传完成，删除临时文件
@@ -87,7 +92,8 @@ def upload():
     except Exception:
         pass
 
-    return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}","sha":sha})
+    return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
+
 
 @app.route('/pdf/<pdf_name>')
 def view_pdf(pdf_name):
@@ -103,6 +109,7 @@ def list_pdfs():
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
 
