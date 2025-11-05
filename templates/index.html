@@ -1,32 +1,49 @@
-<script>
-const form = document.getElementById('uploadForm');
-const resultDiv = document.getElementById('result');
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>File Upload & Scan</title>
+  </head>
+  <body>
+    <h2>Upload</h2>
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+      <label>PIN：<input type="text" name="code" required></label><br>
+      <label>File：<input type="file" name="file" required></label><br>
+      <button type="submit">Submit</button>
+    </form>
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fd = new FormData(form);
+    <div id="result" style="margin-top:20px;"></div>
 
-  try {
-    const res = await fetch('/upload', { method: 'POST', body: fd });
-    const data = await res.json();
+    <script>
+      const form = document.getElementById('uploadForm');
+      const resultDiv = document.getElementById('result');
 
-    if (res.ok && data.status === "success") {
-      const r = data.result;
-      resultDiv.innerHTML = `
-        <div style="color: green;">
-          ✅ 文件提交成功！<br>
-          文件名: ${r.filename}<br>
-          SHA: <code>${r.sha}</code><br>
-          URL 数量: ${r.url_count}<br>
-          可疑关键词: ${r.suspicious_keywords.join(', ') || '无'}<br>
-        </div>
-      `;
-    } else {
-      resultDiv.innerHTML = `<div style="color: red;">⚠️ 错误：${data.message || JSON.stringify(data)}</div>`;
-    }
-  } catch (err) {
-    resultDiv.innerHTML = `<div style="color: red;">⚠️ 网络错误：${err}</div>`;
-  }
-});
-</script>
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        try {
+          const res = await fetch('/upload', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (res.ok && data.status === "success") {
+            const r = data.result;
+            resultDiv.innerHTML = `
+              <div style="color: green;">
+                ✅ 提交成功！<br>
+                文件名: ${r.filename}<br>
+                SHA: <code>${r.sha}</code><br>
+                URL 数量: ${r.url_count}<br>
+                可疑关键词: ${r.suspicious_keywords.join(', ') || '无'}<br>
+              </div>
+            `;
+          } else {
+            resultDiv.innerHTML = `<div style="color: red;">⚠️ 错误：${data.message || JSON.stringify(data)}</div>`;
+          }
+        } catch (err) {
+          resultDiv.innerHTML = `<div style="color: red;">⚠️ 网络错误：${err}</div>`;
+        }
+      });
+    </script>
+  </body>
+</html>
+
 
