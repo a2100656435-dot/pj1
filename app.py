@@ -71,40 +71,56 @@ def generate_pdf(text, filename):
     from fpdf import FPDF
     import os, re
 
-    # 确保输出目录存在
     os.makedirs("pdfs", exist_ok=True)
 
-    # 清理无效字符
+    # 清理非法字符与控制符
     text = re.sub(r'[\x00-\x1F\x7F]', '', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)  # 多余空行
+    text = text.strip()
+
+    # 避免超长单行
+    def wrap_lines(txt, max_len=100):
+        wrapped = []
+        for line in txt.splitlines():
+            while len(line) > max_len:
+                wrapped.append(line[:max_len])
+                line = line[max_len:]
+            wrapped.append(line)
+        return wrapped
 
     class PDF(FPDF):
         def __init__(self):
             super().__init__()
-            # 支持 Unicode
-            self.add_font('DejaVu', '', 'fonts/DejaVuSans.ttf', uni=True)
-            self.set_font('DejaVu', '', 11)
+            # 尝试加载 DejaVu 字体，防止中文乱码
+            font_path = os.path.join("fonts", "DejaVuSans.ttf")
+            if os.path.exists(font_path):
+                self.add_font("DejaVu", "", font_path, uni=True)
+                self.set_font("DejaVu", "", 11)
+            else:
+                self.set_font("Arial", "", 11)
             self.set_auto_page_break(auto=True, margin=15)
             self.add_page()
 
         def safe_write(self, txt):
-            # 拆分过长的行
-            max_len = 120
-            lines = []
-            for line in txt.splitlines():
-                while len(line) > max_len:
-                    lines.append(line[:max_len])
-                    line = line[max_len:]
-                lines.append(line)
-            # 输出每行
+            lines = wrap_lines(txt)
             for l in lines:
                 try:
                     self.multi_cell(0, 8, l)
                 except Exception:
-                    # 防止异常字符导致中断
                     self.multi_cell(0, 8, l.encode("utf-8", "ignore").decode("utf-8"))
 
     pdf = PDF()
     pdf.multi_cell(0, 8, "Scan Result\n\n")
+
+    # 分段输出
+    for paragraph in text.split("\n\n"):
+        if paragraph.strip():
+            pdf.safe_write(paragraph + "\n")
+
+    pdf_path = os.path.join("pdfs", filename)
+    pdf.output(pdf_path)
+    return pdf_path
+
 
     # 分段输出
     paragraphs = text.split("\n\n")
@@ -191,5 +207,6 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
