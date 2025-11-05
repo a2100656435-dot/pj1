@@ -1,73 +1,28 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>文件扫描系统</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; }
-    h2 { color: #333; }
-    .preview { margin-top: 20px; }
-    iframe { width: 100%; height: 600px; border: 1px solid #ccc; }
-    .message { margin-top: 10px; color: red; }
-  </style>
-</head>
+<html>
 <body>
-  <h2>上传文件进行扫描</h2>
-  <form id="uploadForm">
-    <label>文件: <input type="file" name="file" required></label><br><br>
-    <button type="submit">上传并生成 PDF</button>
-  </form>
-  <div class="message" id="message"></div>
-  <div class="preview" id="preview" style="display:none;">
-    <h3>扫描结果预览 PDF:</h3>
-    <iframe id="pdfFrame"></iframe>
-    <button id="resetBtn">扫描另一个文件</button>
-  </div>
-
-  <script>
-    const form = document.getElementById('uploadForm');
-    const message = document.getElementById('message');
-    const preview = document.getElementById('preview');
-    const pdfFrame = document.getElementById('pdfFrame');
-    const resetBtn = document.getElementById('resetBtn');
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      message.textContent = '';
-      const fileInput = form.querySelector('input[name="file"]');
-      if (!fileInput.files.length) return;
-
-      const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
-
-      try {
-        const res = await fetch('/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-          pdfFrame.src = data.pdf_url;
-          preview.style.display = 'block';
-          form.style.display = 'none';
-        } else {
-          message.textContent = data.message || '上传失败';
-        }
-      } catch (err) {
-        console.error(err);
-        message.textContent = '网络或服务器错误';
-      }
-    });
-
-    resetBtn.addEventListener('click', () => {
-      form.reset();
-      form.style.display = 'block';
-      preview.style.display = 'none';
-      pdfFrame.src = '';
-      message.textContent = '';
-    });
-  </script>
+<h2>Upload File</h2>
+<form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" required><br><br>
+    <button type="submit">Upload & Scan</button>
+</form>
+<div id="result"></div>
+<script>
+const form = document.querySelector('form');
+form.onsubmit = async e=>{
+    e.preventDefault();
+    const data = new FormData(form);
+    const res = await fetch('/upload',{method:'POST',body:data});
+    const j = await res.json();
+    if(j.status==='success'){
+        document.getElementById('result').innerHTML = `<a href="${j.pdf_url}" target="_blank">View PDF</a>`;
+    } else {
+        document.getElementById('result').innerText = j.message;
+    }
+};
+</script>
 </body>
 </html>
+
 
 
