@@ -34,6 +34,7 @@ def pdf_ocr_text(path):
 # --- 图片 OCR ---
 def image_ocr_text(path):
     img = Image.open(path).convert("L")
+    img = enhancer.enhance(2.0)  # 提升对比度
     img = img.point(lambda x:0 if x<140 else 255, '1')
     img = img.filter(ImageFilter.SHARPEN)
     text = pytesseract.image_to_string(img, lang='chi_sim+eng')
@@ -104,5 +105,6 @@ def upload():
 
 if __name__=="__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
+
 
 
