@@ -17,6 +17,11 @@ os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'pdf','png','txt','doc','docx'}
 
+@app.route('/admin')
+def admin_dashboard():
+    pdfs = [f for f in os.listdir(app.config['PDF_FOLDER']) if f.lower().endswith('.pdf')]
+    return render_template('admin.html', pdfs=pdfs)
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -64,15 +69,23 @@ def upload():
         return jsonify({"status":"error","message":"no file"}),400
     if not allowed_file(file.filename):
         return jsonify({"status":"error","message":"file type not allowed"}),400
+
     filename = secure_filename(file.filename)
     ext = filename.rsplit('.',1)[1].lower()
     path = os.path.join(app.config['UPLOAD_FOLDER'],filename)
     file.save(path)
 
+    # 提取文字
     text = extract_text(path, ext)
     sha = hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
     pdf_filename = f"{sha}.pdf"
     pdf_path = generate_pdf(text, pdf_filename)
+
+    # 上传完成，删除临时文件
+    try:
+        os.remove(path)
+    except Exception:
+        pass
 
     return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}","sha":sha})
 
@@ -83,7 +96,6 @@ def view_pdf(pdf_name):
         abort(404)
     return send_file(path,as_attachment=False)
 
-# 简单管理端，列出所有 PDF
 @app.route('/admin/pdfs')
 def list_pdfs():
     pdfs = [f for f in os.listdir(app.config['PDF_FOLDER']) if f.lower().endswith('.pdf')]
@@ -91,9 +103,6 @@ def list_pdfs():
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
-
-
-
 
 
 
