@@ -20,7 +20,6 @@ ALLOWED_EXTENSIONS = {'pdf','png','jpg','jpeg','txt','doc','docx'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 
-# 提取文字
 def extract_text(path, ext):
     ext = ext.lower()
     text=""
@@ -44,7 +43,6 @@ def extract_text(path, ext):
         text="[Error extracting text]"
     return text
 
-# 生成 PDF
 def generate_pdf(text, filename):
     pdf = FPDF()
     pdf.add_page()
