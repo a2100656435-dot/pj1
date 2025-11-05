@@ -1,12 +1,17 @@
 import os, secrets, time, io, re
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from werkzeug.utils import secure_filename
-from fpdf import FPDF
 from pdfminer.high_level import extract_text as pdf_extract_text
 from PIL import Image
 import pytesseract
 import docx
 import fitz  # PyMuPDF
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+from reportlab.lib.units import inch
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -40,13 +45,13 @@ def extract_text(path, ext):
         if ext=='pdf':
             text = pdf_extract_text(path)
             if not text.strip():
-                text = pdf_ocr_text(path, lang='chi_sim')  # 支持中文
+                text = pdf_ocr_text(path, lang='chi_sim')
         elif ext=='txt':
             with open(path,'r',encoding='utf-8',errors='ignore') as f:
                 text = f.read()
         elif ext in ('doc','docx'):
-            doc = docx.Document(path)
-            text = '\n'.join([p.text for p in doc.paragraphs])
+            doc_obj = docx.Document(path)
+            text = '\n'.join([p.text for p in doc_obj.paragraphs])
         elif ext in ('png','jpg','jpeg'):
             img = Image.open(path).convert('L')
             img = img.point(lambda x:0 if x<128 else 255,'1')
@@ -56,88 +61,37 @@ def extract_text(path, ext):
         text=""
     return text
 
-# --- 分割长行 ---
-def split_long_lines(text, max_len=90):
-    lines=[]
-    for line in text.splitlines():
-        while len(line)>max_len:
-            lines.append(line[:max_len])
-            line=line[max_len:]
-        lines.append(line)
-    return lines
-
-# --- 生成 Unicode PDF ---
+# --- 生成 PDF (ReportLab) ---
 def generate_pdf(text, filename):
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.lib.enums import TA_JUSTIFY
-    from reportlab.lib.units import inch
-    import os, re
+    text = re.sub(r'[\x00-\x1F\x7F]', '', text).strip()
+    pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
+    os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
-    # 清理非法字符
-    text = re.sub(r'[\x00-\x1F\x7F]', '', text)
-    text = text.strip()
-
-    pdf_path = os.path.join("pdfs", filename)
-    os.makedirs("pdfs", exist_ok=True)
-
-    # 注册中文/Unicode 字体
-    font_path = "fonts/DejaVuSans.ttf"
+    font_path = "fonts/DejaVuSans12.ttf"
     if not os.path.exists(font_path):
-        os.makedirs("fonts", exist_ok=True)
-        # 如果没有字体文件，报清晰错误
-        raise RuntimeError("Font not found: fonts/DejaVuSans.ttf — 请放入字体文件")
-
+        raise FileNotFoundError(f"Font file not found: {font_path}")
     pdfmetrics.registerFont(TTFont('DejaVu', font_path))
 
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
                             rightMargin=72, leftMargin=72,
                             topMargin=72, bottomMargin=72)
-
     styles = getSampleStyleSheet()
     style = styles["Normal"]
     style.fontName = 'DejaVu'
     style.fontSize = 11
     style.leading = 16
-    style.alignment = TA_JUSTIFY
 
     story = []
-
     story.append(Paragraph("<b>Scan Result</b><br/><br/>", style))
 
-    # 按段落分割
     for para in text.split("\n\n"):
         para = para.strip()
         if para:
             story.append(Paragraph(para.replace("\n", "<br/>"), style))
-            story.append(Spacer(1, 0.2 * inch))
+            story.append(Spacer(1, 0.2*inch))
 
     doc.build(story)
     return pdf_path
-
-
-    # 分段输出
-    for paragraph in text.split("\n\n"):
-        if paragraph.strip():
-            pdf.safe_write(paragraph + "\n")
-
-    pdf_path = os.path.join("pdfs", filename)
-    pdf.output(pdf_path)
-    return pdf_path
-
-
-    # 分段输出
-    paragraphs = text.split("\n\n")
-    for p in paragraphs:
-        pdf.safe_write(p + "\n")
-
-    pdf_path = os.path.join("pdfs", filename)
-    pdf.output(pdf_path)
-    return pdf_path
-
 
 # --- 路由 ---
 @app.route('/')
@@ -145,17 +99,13 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload',methods=['POST'])
-@app.route('/upload', methods=['POST'])
 def upload():
     try:
-        # 检查文件是否上传
         if 'file' not in request.files:
             return jsonify({"status":"error","message":"No file part in request"}),400
         file = request.files['file']
         if file.filename == '':
             return jsonify({"status":"error","message":"No selected file"}),400
-
-        # 检查文件类型
         if not allowed_file(file.filename):
             return jsonify({"status":"error","message":"File type not allowed"}),400
 
@@ -164,30 +114,15 @@ def upload():
         path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(path)
 
-        # 提取文字
-        try:
-            text = extract_text(path, ext)
-        except Exception as e:
-            print("Extract text error:", e)
-            text = "[Error extracting text]"
+        text = extract_text(path, ext)
 
-        # 生成 PDF
-        try:
-            timestamp = int(time.time())
-            randstr = secrets.token_hex(4)
-            pdf_filename = f"{timestamp}_{randstr}.pdf"
-            pdf_path = generate_pdf(text, pdf_filename)
-        except Exception as e:
-            print("PDF generation error:", e)
-            return jsonify({"status":"error","message":"PDF generation failed"}),500
-        finally:
-            # 删除临时上传文件
-            try:
-                os.remove(path)
-            except Exception:
-                pass
+        timestamp = int(time.time())
+        randstr = secrets.token_hex(4)
+        pdf_filename = f"{timestamp}_{randstr}.pdf"
+        pdf_path = generate_pdf(text, pdf_filename)
 
-        # 返回 PDF 链接
+        os.remove(path)  # 删除临时文件
+
         return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
 
     except Exception as e:
@@ -213,7 +148,9 @@ def handle_500(e):
     return jsonify({"status":"error","message":"Internal server error"}),500
 
 if __name__=="__main__":
-    app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
+
+
 
 
 
