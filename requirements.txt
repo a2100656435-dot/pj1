@@ -1,9 +1,10 @@
 Flask==3.0.3
 requests==2.32.3
 beautifulsoup4==4.12.3
-pdfminer.six
-pillow
-pytesseract
-docx
-fitz
-reportlab
+pdfminer.six==20221105
+pillow==10.0.0
+pytesseract==0.3.10
+python-docx==0.8.12
+PyMuPDF==1.23.4  # fitz
+reportlab==4.0.0
+werkzeug==2.3.10
