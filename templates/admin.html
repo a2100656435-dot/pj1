@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Admin - PDF Dashboard</title>
+</head>
+<body>
+<h2>PDF Dashboard</h2>
+<table border="1" cellpadding="5" cellspacing="0">
+<tr><th>#</th><th>File Name</th><th>Preview</th></tr>
+{% for i,pdf in enumerate(pdfs,1) %}
+<tr>
+  <td>{{ i }}</td>
+  <td>{{ pdf }}</td>
+  <td><a href="/pdf/{{ pdf }}" target="_blank">View / Download</a></td>
+</tr>
+{% endfor %}
+</table>
+</body>
+</html>
