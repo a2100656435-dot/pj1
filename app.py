@@ -67,7 +67,7 @@ def generate_pdf(text, filename):
     pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
     os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
-    font_path = "fonts/DejaVuSans12.ttf"
+    font_path = "fonts/DejaVuSans.ttf"
     if not os.path.exists(font_path):
         raise FileNotFoundError(f"Font file not found: {font_path}")
     pdfmetrics.registerFont(TTFont('DejaVu', font_path))
@@ -149,6 +149,7 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
+
 
 
 
