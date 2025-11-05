@@ -68,22 +68,53 @@ def split_long_lines(text, max_len=90):
 
 # --- 生成 Unicode PDF ---
 def generate_pdf(text, filename):
-    pdf = FPDF(format='A4')
-    pdf.add_page()
-    pdf.set_margins(10,10,10)
-    pdf.add_font('DejaVu','', 'fonts/DejaVuSans.ttf', uni=True)
-    pdf.set_font('DejaVu','',11)
+    from fpdf import FPDF
+    import os, re
 
-    # 清理控制字符
+    # 确保输出目录存在
+    os.makedirs("pdfs", exist_ok=True)
+
+    # 清理无效字符
     text = re.sub(r'[\x00-\x1F\x7F]', '', text)
 
-    pdf.cell(0,10,"Scan Result",0,1)
-    for line in split_long_lines(text):
-        pdf.multi_cell(0,8,line)
+    class PDF(FPDF):
+        def __init__(self):
+            super().__init__()
+            # 支持 Unicode
+            self.add_font('DejaVu', '', 'fonts/DejaVuSans.ttf', uni=True)
+            self.set_font('DejaVu', '', 11)
+            self.set_auto_page_break(auto=True, margin=15)
+            self.add_page()
 
-    pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
+        def safe_write(self, txt):
+            # 拆分过长的行
+            max_len = 120
+            lines = []
+            for line in txt.splitlines():
+                while len(line) > max_len:
+                    lines.append(line[:max_len])
+                    line = line[max_len:]
+                lines.append(line)
+            # 输出每行
+            for l in lines:
+                try:
+                    self.multi_cell(0, 8, l)
+                except Exception:
+                    # 防止异常字符导致中断
+                    self.multi_cell(0, 8, l.encode("utf-8", "ignore").decode("utf-8"))
+
+    pdf = PDF()
+    pdf.multi_cell(0, 8, "Scan Result\n\n")
+
+    # 分段输出
+    paragraphs = text.split("\n\n")
+    for p in paragraphs:
+        pdf.safe_write(p + "\n")
+
+    pdf_path = os.path.join("pdfs", filename)
     pdf.output(pdf_path)
     return pdf_path
+
 
 # --- 路由 ---
 @app.route('/')
@@ -160,4 +191,5 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
