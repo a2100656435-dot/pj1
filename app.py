@@ -40,21 +40,33 @@ def extract_text(path, ext):
     return text
 
 def generate_pdf(text, filename):
-    pdf = FPDF()
+    pdf = FPDF(format='A4')
     pdf.add_page()
-    # 注册 Unicode 字体
+    pdf.set_margins(10,10,10)
     pdf.add_font('DejaVu','', 'fonts/DejaVuSans.ttf', uni=True)
-    pdf.set_font('DejaVu','',12)
-    
+    pdf.set_font('DejaVu','',11)
+
+    # 清理文本
+    text = re.sub(r'[\x00-\x1F\x7F]', '', text)
+
+    # 长行分割
+    def split_long_lines(text, max_len=90):
+        lines = []
+        for line in text.splitlines():
+            while len(line) > max_len:
+                lines.append(line[:max_len])
+                line = line[max_len:]
+            lines.append(line)
+        return lines
+
     pdf.cell(0,10,"Scan Result",0,1)
-    
-    # 输出文本，每行自动换行
-    for line in text.splitlines():
+    for line in split_long_lines(text):
         pdf.multi_cell(0,8,line)
-    
+
     pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
     pdf.output(pdf_path)
     return pdf_path
+
 
 @app.route('/')
 def index():
@@ -117,6 +129,7 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
 
