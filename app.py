@@ -22,6 +22,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def upload():
     code = request.form.get('code')
     file = request.files.get('file')
@@ -29,7 +30,38 @@ def upload():
         return jsonify({"status":"error","message":"invalid or used code"}), 400
     if not file:
         return jsonify({"status":"error","message":"no file"}), 400
-@app.route('/result/<sha>')
+
+    filename = secure_filename(file.filename)
+    path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(path)
+
+    # 计算 SHA
+    with open(path, "rb") as f:
+        data = f.read()
+    sha = hashlib.sha256(data).hexdigest()
+
+    # 简单扫描示例，检测 URL 和关键词
+    text = data.decode(errors="ignore")
+    import re
+    result = {
+        "sha": sha,
+        "filename": filename,
+        "url_count": len(re.findall(r'https?://[^\s"\']+', text)),
+        "suspicious_keywords": re.findall(r'\b(login|verify|password|account|reset)\b', text, flags=re.I)
+    }
+
+    # 保存结果到 JSON 文件
+    result_path = os.path.join(app.config['RESULT_FOLDER'], f"{sha}.json")
+    with open(result_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    # 标记 code 已使用
+    CODES[code] = True
+    save_codes()
+
+    # 返回完整扫描结果
+    return jsonify({"status":"success", "result": result})
+
 def view_result(sha):
     # 防止路径遍历
     safe_name = "".join(c for c in sha if c.isalnum())
@@ -77,6 +109,7 @@ def view_result(sha):
     host = request.host_url.rstrip("/")  # 自动生成基础URL
     view_url = f"{host}/result/{sha}"
     return jsonify({"status":"success", "sha": sha, "view_url": view_url})
+
 
 
 
