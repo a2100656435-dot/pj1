@@ -1,9 +1,17 @@
-<div id="result" style="margin-top:20px;"></div>
-
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scan Upload</title>
+</head>
+<body>
+<h2>Upload File (PDF, PNG, TXT, DOC/DOCX, <20MB)</h2>
 <form id="uploadForm" enctype="multipart/form-data">
   <input type="file" name="file" required><br><br>
   <button type="submit">Upload & Scan</button>
 </form>
+
+<div id="result" style="margin-top:20px;"></div>
 
 <script>
 const form = document.getElementById('uploadForm');
@@ -15,21 +23,22 @@ form.addEventListener('submit', async (e) => {
   try {
     const res = await fetch('/upload', { method: 'POST', body: fd });
     const data = await res.json();
-    if (res.ok && data.status === "success") {
-      resultDiv.innerHTML = `
-        <div style="color:green;">
-          ✅ Scan complete!<br>
-          <a href="${data.pdf_url}" target="_blank">View PDF</a>
-        </div>
-      `;
-      form.reset();  // ✅ 重置表单，可上传下一个文件
+    if (res.ok && data.status==="success") {
+      const link = `<a href="${data.pdf_url}" target="_blank">View PDF</a>`;
+      // 追加历史扫描
+      const div = document.createElement('div');
+      div.style.color="green";
+      div.innerHTML = `✅ Scan complete! ${link}`;
+      resultDiv.prepend(div);
+      form.reset();  // 可上传下一个文件
     } else {
-      resultDiv.innerHTML = `<div style="color:red;">⚠️ Error: ${data.message}</div>`;
+      resultDiv.innerHTML=`<div style="color:red;">⚠️ Error: ${data.message}</div>`;
     }
-  } catch (err) {
-    resultDiv.innerHTML = `<div style="color:red;">⚠️ Network error: ${err}</div>`;
+  } catch(err) {
+    resultDiv.innerHTML=`<div style="color:red;">⚠️ Network error: ${err}</div>`;
   }
 });
 </script>
-
+</body>
+</html>
 
