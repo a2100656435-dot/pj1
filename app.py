@@ -1,4 +1,4 @@
-import os, re, hashlib
+import os, re, hashlib, time, secrets
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
@@ -16,11 +16,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'pdf','png','txt','doc','docx'}
-
-@app.route('/admin')
-def admin_dashboard():
-    pdfs = [f for f in os.listdir(app.config['PDF_FOLDER']) if f.lower().endswith('.pdf')]
-    return render_template('admin.html', pdfs=pdfs)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
@@ -61,39 +56,40 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload',methods=['POST'])
-@app.route('/upload',methods=['POST'])
 def upload():
-    if 'file' not in request.files:
-        return jsonify({"status":"error","message":"no file"}),400
-    file = request.files['file']
-    if file.filename=='':
-        return jsonify({"status":"error","message":"no file"}),400
-    if not allowed_file(file.filename):
-        return jsonify({"status":"error","message":"file type not allowed"}),400
-
-    filename = secure_filename(file.filename)
-    ext = filename.rsplit('.',1)[1].lower()
-    path = os.path.join(app.config['UPLOAD_FOLDER'],filename)
-    file.save(path)
-
-    # 提取文字
-    text = extract_text(path, ext)
-
-    # 生成 PDF 文件名（允许重复扫描）
-    import time, secrets
-    timestamp = int(time.time())
-    randstr = secrets.token_hex(4)
-    pdf_filename = f"{timestamp}_{randstr}.pdf"
-    pdf_path = generate_pdf(text, pdf_filename)
-
-    # 上传完成，删除临时文件
     try:
-        os.remove(path)
-    except Exception:
-        pass
+        if 'file' not in request.files:
+            return jsonify({"status":"error","message":"no file"}),400
+        file = request.files['file']
+        if file.filename=='':
+            return jsonify({"status":"error","message":"no file"}),400
+        if not allowed_file(file.filename):
+            return jsonify({"status":"error","message":"file type not allowed"}),400
 
-    return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
+        filename = secure_filename(file.filename)
+        ext = filename.rsplit('.',1)[1].lower()
+        path = os.path.join(app.config['UPLOAD_FOLDER'],filename)
+        file.save(path)
 
+        # 提取文字
+        text = extract_text(path, ext)
+
+        # 生成 PDF 文件名（允许重复扫描）
+        timestamp = int(time.time())
+        randstr = secrets.token_hex(4)
+        pdf_filename = f"{timestamp}_{randstr}.pdf"
+        pdf_path = generate_pdf(text, pdf_filename)
+
+        # 上传完成，删除临时文件
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+        return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
+    except Exception as e:
+        import traceback
+        return jsonify({"status":"error","message":str(e),"trace":traceback.format_exc()}),500
 
 @app.route('/pdf/<pdf_name>')
 def view_pdf(pdf_name):
@@ -102,13 +98,21 @@ def view_pdf(pdf_name):
         abort(404)
     return send_file(path,as_attachment=False)
 
-@app.route('/admin/pdfs')
-def list_pdfs():
+@app.route('/admin')
+def admin_dashboard():
     pdfs = [f for f in os.listdir(app.config['PDF_FOLDER']) if f.lower().endswith('.pdf')]
-    return jsonify({"pdfs":pdfs})
+    # 最新在前
+    pdfs.sort(reverse=True)
+    return render_template('admin.html', pdfs=pdfs)
+
+# 全局异常处理，返回 JSON 避免 Unexpected token '<'
+@app.errorhandler(500)
+def handle_500(e):
+    return jsonify({"status":"error","message":"Internal server error"}),500
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
 
