@@ -1,55 +1,32 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>File Upload & Scan</title>
-  </head>
-  <body>
-    <h2>Upload</h2>
-    <!-- 给 form 添加 id -->
-    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
-      <label>PIN：<input type="text" name="code" required></label><br>
-      <label>File：<input type="file" name="file" required></label><br>
-      <button type="submit">Submit</button>
-    </form>
+<script>
+const form = document.getElementById('uploadForm');
+const resultDiv = document.getElementById('result');
 
-    <!-- 用于显示返回结果 -->
-    <div id="result" style="margin-top: 20px;"></div>
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
 
-    <!-- JS 异步提交 -->
-    <script>
-      const form = document.getElementById('uploadForm');
-      const resultDiv = document.getElementById('result');
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await res.json();
 
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault(); // 阻止默认表单提交刷新页面
-        const fd = new FormData(form);
-
-        try {
-          const res = await fetch('/upload', {
-            method: 'POST',
-            body: fd
-          });
-          const data = await res.json();
-
-          if (res.ok && data.status === "success") {
-            // 成功，显示 SHA 和可点击链接
-            resultDiv.innerHTML = `
-              <div style="color: green;">
-                ✅ 提交成功！<br>
-                SHA: <code>${data.sha}</code><br>
-                <a href="${data.view_url}" target="_blank">查看扫描结果</a>
-              </div>
-            `;
-          } else {
-            // 错误提示
-            resultDiv.innerHTML = `<div style="color: red;">⚠️ 错误：${data.message || JSON.stringify(data)}</div>`;
-          }
-        } catch (err) {
-          resultDiv.innerHTML = `<div style="color: red;">⚠️ 网络错误：${err}</div>`;
-        }
-      });
-    </script>
-  </body>
-</html>
+    if (res.ok && data.status === "success") {
+      const r = data.result;
+      resultDiv.innerHTML = `
+        <div style="color: green;">
+          ✅ 文件提交成功！<br>
+          文件名: ${r.filename}<br>
+          SHA: <code>${r.sha}</code><br>
+          URL 数量: ${r.url_count}<br>
+          可疑关键词: ${r.suspicious_keywords.join(', ') || '无'}<br>
+        </div>
+      `;
+    } else {
+      resultDiv.innerHTML = `<div style="color: red;">⚠️ 错误：${data.message || JSON.stringify(data)}</div>`;
+    }
+  } catch (err) {
+    resultDiv.innerHTML = `<div style="color: red;">⚠️ 网络错误：${err}</div>`;
+  }
+});
+</script>
 
