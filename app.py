@@ -29,6 +29,18 @@ def upload():
         return jsonify({"status":"error","message":"invalid or used code"}), 400
     if not file:
         return jsonify({"status":"error","message":"no file"}), 400
+@app.route('/result/<sha>')
+def view_result(sha):
+    # 防止路径遍历
+    safe_name = "".join(c for c in sha if c.isalnum())
+    result_path = os.path.join(app.config['RESULT_FOLDER'], f"{safe_name}.json")
+    if not os.path.exists(result_path):
+        abort(404)
+    # 直接返回 JSON
+    with open(result_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify(data)
+
 
     filename = secure_filename(file.filename)
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -65,6 +77,7 @@ def upload():
     host = request.host_url.rstrip("/")  # 自动生成基础URL
     view_url = f"{host}/result/{sha}"
     return jsonify({"status":"success", "sha": sha, "view_url": view_url})
+
 
 
 
