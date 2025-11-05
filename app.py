@@ -20,14 +20,14 @@ ALLOWED_EXTENSIONS = {'pdf','png','jpg','jpeg','txt','doc','docx'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- 提取文字 ---
+# 提取文字
 def extract_text(path, ext):
     ext = ext.lower()
     text=""
     try:
         if ext=='pdf':
             text = pdf_extract_text(path)
-            if not text.strip():  # 空 PDF 使用 OCR
+            if not text.strip():
                 img = Image.open(path).convert("RGB")
                 text = pytesseract.image_to_string(img, lang="chi_sim")
         elif ext=='txt':
@@ -44,7 +44,7 @@ def extract_text(path, ext):
         text="[Error extracting text]"
     return text
 
-# --- 生成 PDF ---
+# 生成 PDF
 def generate_pdf(text, filename):
     pdf = FPDF()
     pdf.add_page()
@@ -104,6 +104,7 @@ def admin_dashboard():
 
 if __name__=="__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
+
 
 
 
