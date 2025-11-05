@@ -1,8 +1,8 @@
-import os, secrets, time, io, re
+import os, io, re, secrets, time
 from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
 from pdfminer.high_level import extract_text as pdf_extract_text
-from PIL import Image
+from PIL import Image, ImageFilter
 import pytesseract
 import docx
 import fitz  # PyMuPDF
@@ -18,21 +18,25 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- PDF OCR ---
-def pdf_ocr_text(path, lang='chi_sim+eng'):
+def pdf_ocr_text(path):
     doc = fitz.open(path)
     full_text = ""
     for page in doc:
-        pix = page.get_pixmap()
+        pix = page.get_pixmap(dpi=300)  # 提高 DPI
         img_bytes = pix.tobytes("png")
-        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
-        text = pytesseract.image_to_string(img, lang=lang)
+        img = Image.open(io.BytesIO(img_bytes)).convert("L")
+        img = img.point(lambda x:0 if x<140 else 255, '1')  # 二值化
+        img = img.filter(ImageFilter.SHARPEN)  # 锐化
+        text = pytesseract.image_to_string(img, lang='chi_sim+eng')
         full_text += text + "\n"
     return full_text
 
 # --- 图片 OCR ---
-def image_ocr_text(path, lang='chi_sim+eng'):
-    img = Image.open(path).convert('RGB')
-    text = pytesseract.image_to_string(img, lang=lang)
+def image_ocr_text(path):
+    img = Image.open(path).convert("L")
+    img = img.point(lambda x:0 if x<140 else 255, '1')
+    img = img.filter(ImageFilter.SHARPEN)
+    text = pytesseract.image_to_string(img, lang='chi_sim+eng')
     return text
 
 # --- 提取文字 ---
@@ -92,7 +96,6 @@ def upload():
         text = extract_text(path, ext)
 
         os.remove(path)
-
         return jsonify({"status":"success","text": text})
     except Exception as e:
         import traceback
@@ -101,9 +104,4 @@ def upload():
 
 if __name__=="__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
-
-
-
-
-
 
