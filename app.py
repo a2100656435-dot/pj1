@@ -68,49 +68,56 @@ def split_long_lines(text, max_len=90):
 
 # --- 生成 Unicode PDF ---
 def generate_pdf(text, filename):
-    from fpdf import FPDF
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.lib.enums import TA_JUSTIFY
+    from reportlab.lib.units import inch
     import os, re
 
-    os.makedirs("pdfs", exist_ok=True)
-
-    # 清理非法字符与控制符
+    # 清理非法字符
     text = re.sub(r'[\x00-\x1F\x7F]', '', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)  # 多余空行
     text = text.strip()
 
-    # 避免超长单行
-    def wrap_lines(txt, max_len=100):
-        wrapped = []
-        for line in txt.splitlines():
-            while len(line) > max_len:
-                wrapped.append(line[:max_len])
-                line = line[max_len:]
-            wrapped.append(line)
-        return wrapped
+    pdf_path = os.path.join("pdfs", filename)
+    os.makedirs("pdfs", exist_ok=True)
 
-    class PDF(FPDF):
-        def __init__(self):
-            super().__init__()
-            # 尝试加载 DejaVu 字体，防止中文乱码
-            font_path = os.path.join("fonts", "DejaVuSans.ttf")
-            if os.path.exists(font_path):
-                self.add_font("DejaVu", "", font_path, uni=True)
-                self.set_font("DejaVu", "", 11)
-            else:
-                self.set_font("Arial", "", 11)
-            self.set_auto_page_break(auto=True, margin=15)
-            self.add_page()
+    # 注册中文/Unicode 字体
+    font_path = "fonts/DejaVuSans.ttf"
+    if not os.path.exists(font_path):
+        os.makedirs("fonts", exist_ok=True)
+        # 如果没有字体文件，报清晰错误
+        raise RuntimeError("Font not found: fonts/DejaVuSans.ttf — 请放入字体文件")
 
-        def safe_write(self, txt):
-            lines = wrap_lines(txt)
-            for l in lines:
-                try:
-                    self.multi_cell(0, 8, l)
-                except Exception:
-                    self.multi_cell(0, 8, l.encode("utf-8", "ignore").decode("utf-8"))
+    pdfmetrics.registerFont(TTFont('DejaVu', font_path))
 
-    pdf = PDF()
-    pdf.multi_cell(0, 8, "Scan Result\n\n")
+    doc = SimpleDocTemplate(pdf_path, pagesize=A4,
+                            rightMargin=72, leftMargin=72,
+                            topMargin=72, bottomMargin=72)
+
+    styles = getSampleStyleSheet()
+    style = styles["Normal"]
+    style.fontName = 'DejaVu'
+    style.fontSize = 11
+    style.leading = 16
+    style.alignment = TA_JUSTIFY
+
+    story = []
+
+    story.append(Paragraph("<b>Scan Result</b><br/><br/>", style))
+
+    # 按段落分割
+    for para in text.split("\n\n"):
+        para = para.strip()
+        if para:
+            story.append(Paragraph(para.replace("\n", "<br/>"), style))
+            story.append(Spacer(1, 0.2 * inch))
+
+    doc.build(story)
+    return pdf_path
+
 
     # 分段输出
     for paragraph in text.split("\n\n"):
@@ -207,6 +214,7 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
 
 
 
