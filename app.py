@@ -1,21 +1,16 @@
 import os, secrets, time, io, re
-from flask import Flask, render_template, request, jsonify, send_file, abort
+from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
-from fpdf import FPDF
 from pdfminer.high_level import extract_text as pdf_extract_text
 from PIL import Image
 import pytesseract
 import docx
 import fitz  # PyMuPDF
 
-# --- Flask App ---
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['PDF_FOLDER'] = 'pdfs'
 app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB
-
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'pdf','png','jpg','jpeg','txt','doc','docx'}
 
@@ -28,7 +23,7 @@ def pdf_ocr_text(path, lang='chi_sim+eng'):
     full_text = ""
     for page in doc:
         pix = page.get_pixmap()
-        img_bytes = pix.tobytes("png")  # 转 PNG
+        img_bytes = pix.tobytes("png")
         img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
         text = pytesseract.image_to_string(img, lang=lang)
         full_text += text + "\n"
@@ -71,39 +66,7 @@ def extract_text(path, ext):
     # 自动标注超链接
     url_pattern = re.compile(r'(https?://[^\s]+)')
     text = url_pattern.sub(r'[链接: \1]', text)
-
     return text
-
-# --- 生成 PDF ---
-def generate_pdf(text, filename):
-    os.makedirs(app.config['PDF_FOLDER'], exist_ok=True)
-    text = re.sub(r'[\x00-\x1F\x7F]', '', text)
-
-    class PDF(FPDF):
-        def __init__(self):
-            super().__init__()
-            self.add_font('DejaVu','', 'fonts/DejaVuSans.ttf', uni=True)
-            self.set_font('DejaVu','',11)
-            self.set_auto_page_break(auto=True, margin=15)
-            self.add_page()
-
-        def safe_write(self, txt):
-            max_len = 120
-            for line in txt.splitlines():
-                while len(line) > max_len:
-                    self.multi_cell(0,8,line[:max_len])
-                    line = line[max_len:]
-                self.multi_cell(0,8,line)
-
-    pdf = PDF()
-    pdf.multi_cell(0,8,"Scan Result\n\n")
-    paragraphs = text.split("\n\n")
-    for p in paragraphs:
-        pdf.safe_write(p + "\n")
-
-    pdf_path = os.path.join(app.config['PDF_FOLDER'], filename)
-    pdf.output(pdf_path)
-    return pdf_path
 
 # --- Routes ---
 @app.route('/')
@@ -128,39 +91,16 @@ def upload():
 
         text = extract_text(path, ext)
 
-        timestamp = int(time.time())
-        randstr = secrets.token_hex(4)
-        pdf_filename = f"{timestamp}_{randstr}.pdf"
-        pdf_path = generate_pdf(text, pdf_filename)
-
         os.remove(path)
 
-        return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
+        return jsonify({"status":"success","text": text})
     except Exception as e:
         import traceback
         print(traceback.format_exc())
         return jsonify({"status":"error","message":"Internal server error","trace":traceback.format_exc()}),500
 
-@app.route('/pdf/<pdf_name>')
-def view_pdf(pdf_name):
-    path = os.path.join(app.config['PDF_FOLDER'],pdf_name)
-    if not os.path.exists(path):
-        abort(404)
-    return send_file(path, as_attachment=False)
-
-@app.route('/admin')
-def admin_dashboard():
-    pdfs = [f for f in os.listdir(app.config['PDF_FOLDER']) if f.lower().endswith('.pdf')]
-    pdfs.sort(reverse=True)
-    return render_template('admin.html', pdfs=pdfs)
-
-@app.errorhandler(500)
-def handle_500(e):
-    return jsonify({"status":"error","message":"Internal server error"}),500
-
 if __name__=="__main__":
-    app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
-
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT',5000)))
 
 
 
