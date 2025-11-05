@@ -91,38 +91,55 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload',methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def upload():
     try:
+        # 检查文件是否上传
         if 'file' not in request.files:
-            return jsonify({"status":"error","message":"no file"}),400
+            return jsonify({"status":"error","message":"No file part in request"}),400
         file = request.files['file']
-        if file.filename=='':
-            return jsonify({"status":"error","message":"no file"}),400
+        if file.filename == '':
+            return jsonify({"status":"error","message":"No selected file"}),400
+
+        # 检查文件类型
         if not allowed_file(file.filename):
-            return jsonify({"status":"error","message":"file type not allowed"}),400
+            return jsonify({"status":"error","message":"File type not allowed"}),400
 
         filename = secure_filename(file.filename)
         ext = filename.rsplit('.',1)[1].lower()
-        path = os.path.join(app.config['UPLOAD_FOLDER'],filename)
+        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(path)
 
-        text = extract_text(path, ext)
-
-        timestamp = int(time.time())
-        randstr = secrets.token_hex(4)
-        pdf_filename = f"{timestamp}_{randstr}.pdf"
-        pdf_path = generate_pdf(text, pdf_filename)
-
-        # 删除临时文件
+        # 提取文字
         try:
-            os.remove(path)
-        except Exception:
-            pass
+            text = extract_text(path, ext)
+        except Exception as e:
+            print("Extract text error:", e)
+            text = "[Error extracting text]"
 
+        # 生成 PDF
+        try:
+            timestamp = int(time.time())
+            randstr = secrets.token_hex(4)
+            pdf_filename = f"{timestamp}_{randstr}.pdf"
+            pdf_path = generate_pdf(text, pdf_filename)
+        except Exception as e:
+            print("PDF generation error:", e)
+            return jsonify({"status":"error","message":"PDF generation failed"}),500
+        finally:
+            # 删除临时上传文件
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+        # 返回 PDF 链接
         return jsonify({"status":"success","pdf_url":f"/pdf/{pdf_filename}"})
+
     except Exception as e:
         import traceback
-        return jsonify({"status":"error","message":str(e),"trace":traceback.format_exc()}),500
+        print(traceback.format_exc())
+        return jsonify({"status":"error","message":"Internal server error","trace":traceback.format_exc()}),500
 
 @app.route('/pdf/<pdf_name>')
 def view_pdf(pdf_name):
@@ -143,3 +160,4 @@ def handle_500(e):
 
 if __name__=="__main__":
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT',5000)))
+
